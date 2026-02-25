@@ -1,192 +1,301 @@
-# OpenClaw-Alma-v2 Railway Template
+# OpenClaw Railway Template (1‑click deploy)
 
-**OpenFixer Control**: This deployment is managed under OP3NF1XER governance.  
-**SSH Preconfigured**: OpenSSH client included for remote management capabilities.
-
-This repo packages **OpenClaw** for Railway with a small **/setup** web wizard so users can deploy and onboard **without running any commands**.
+This repo packages **OpenClaw** for Railway with a comprehensive **/setup** web wizard so users can deploy and onboard **without running any commands**.
 
 ## What you get
 
 - **OpenClaw Gateway + Control UI** (served at `/` and `/openclaw`)
-- A friendly **Setup Wizard** at `/setup` (protected by a password)
-- **SSH Client Preinstalled** - OpenSSH client ready for remote connections
+- A powerful **Setup Wizard** at `/setup` (protected by a password) with:
+  - **Debug Console** - Run openclaw commands without SSH
+  - **Config Editor** - Edit openclaw.json with automatic backups
+  - **Pairing Helper** - Approve devices via UI
+  - **Plugin Management** - List and enable plugins
+  - **Import/Export Backup** - Migrate configurations easily
 - Persistent state via **Railway Volume** (so config/credentials/memory survive redeploys)
-- One-click **Export backup** (so users can migrate off Railway later)
-- **Import backup** from `/setup` (advanced recovery)
+- **Public health endpoint** at `/healthz` for monitoring
+- **Custom provider support** for Ollama, vLLM, and other OpenAI-compatible APIs
+- **Flexible OpenClaw version control** via environment variable
+- **Smart Railway proxy detection** for proper client IP handling
 
-## How it works (high level)
+## Quick Start
 
-- The container runs a wrapper web server.
-- The wrapper protects `/setup` (and the Control UI at `/openclaw`) with `SETUP_PASSWORD` using HTTP Basic auth.
-- During setup, the wrapper runs `openclaw onboard --non-interactive ...` inside the container, writes state to the volume, and then starts the gateway.
-- After setup, **`/` is OpenClaw**. The wrapper reverse-proxies all traffic (including WebSockets) to the local gateway process.
-- **SSH Access**: The container includes OpenSSH client for remote management and tunneling.
+1. **Deploy to Railway** using this template
+2. Set required environment variables (see below)
+3. Visit `https://your-app.up.railway.app/setup`
+4. Complete the setup wizard
+5. Start chatting at `/openclaw`
 
-## Railway deploy instructions
+## Environment Variables
 
-In Railway Template Composer:
+### Required
 
-1) Create a new template from this repository.
-2) Add a **Volume** mounted at `/data`.
-3) Set the following variables:
+- **`SETUP_PASSWORD`** - Password to access `/setup` wizard
 
-Required:
-- `SETUP_PASSWORD` — user-provided password to access `/setup` and the Control UI (`/openclaw`) via HTTP Basic auth
+### Recommended
 
-Recommended:
+- **`OPENCLAW_STATE_DIR=/data/.openclaw`** - Config and credentials directory
+- **`OPENCLAW_WORKSPACE_DIR=/data/workspace`** - Agent workspace directory
+- **`OPENCLAW_GATEWAY_TOKEN`** - Stable auth token (auto-generated if not set)
+- **`OPENCLAW_VERSION`** - Pin to a specific release tag (e.g., `v2026.2.19`); omit to auto-detect latest stable
+
+### Optional
+
+- **`OPENCLAW_PUBLIC_PORT=8080`** - Wrapper HTTP port (default: 8080)
+- **`PORT`** - Fallback if OPENCLAW_PUBLIC_PORT not set
+- **`INTERNAL_GATEWAY_PORT=18789`** - Gateway internal port
+- **`OPENCLAW_ENTRY`** - Path to openclaw entry.js (default: /openclaw/dist/entry.js)
+- **`OPENCLAW_TEMPLATE_DEBUG=true`** - Enable debug logging (logs sensitive tokens)
+- **`OPENCLAW_TRUST_PROXY_ALL=true`** - Trust all proxies (Railway auto-detected by default)
+
+### Legacy (auto-migrated)
+
+- `CLAWDBOT_*` variables automatically migrate to `OPENCLAW_*`
+- `MOLTBOT_*` variables automatically migrate to `OPENCLAW_*`
+
+## OpenClaw Version Control
+
+### Default: Auto-detect Latest Stable Release
+
+When `OPENCLAW_VERSION` is not set, the build **automatically detects and uses the latest stable release** via a 3-tier cascade:
+
+1. **GitHub Releases API** — queries `/releases/latest`, which excludes pre-releases and drafts
+2. **`git ls-remote` tag detection** — fallback if the API is unreachable; filters out pre-release tags
+3. **`main` branch** — last-resort fallback only, with a warning in build logs
+
+This means one-click deployments always get the latest stable release with no manual configuration required.
+
+### Pinning a Specific Version (Advanced)
+
+Set `OPENCLAW_VERSION` to override auto-detection:
+
+```
+OPENCLAW_VERSION=v2026.2.15
+```
+
+Accepted values: any release tag (e.g., `v2026.2.19`), branch name, or commit SHA.
+
+**Use cases:**
+- Lock to a known-good version when the latest release has a regression
+- Test a specific branch or pre-release tag
+- Ensure reproducible builds across redeploys
+
+### Finding Available Versions
+
+```bash
+git ls-remote --tags https://github.com/openclaw/openclaw.git | grep -v '\^{}' | sed 's|.*refs/tags/||'
+```
+
+Or browse [github.com/openclaw/openclaw/releases](https://github.com/openclaw/openclaw/releases).
+
+See **[docs/OPENCLAW-VERSION-CONTROL.md](docs/OPENCLAW-VERSION-CONTROL.md)** for full details.
+
+## New Features in This Fork
+
+### Debug Console 🔧
+
+Run openclaw commands without SSH access:
+
+- **Gateway lifecycle:** restart, stop, start
+- **OpenClaw CLI:** version, status, health, doctor, logs
+- **Config inspection:** get any config value
+- **Device management:** list and approve pairing requests
+- **Plugin management:** list and enable plugins
+- **Strict allowlist:** Only 13 safe commands permitted
+
+### Config Editor ✏️
+
+- Edit `openclaw.json` directly in the browser
+- Automatic timestamped backups before each save (`.bak-YYYY-MM-DDTHH-MM-SS-SSSZ`)
+- Gateway auto-restart after changes
+- Syntax highlighting (monospace font)
+- 500KB safety limit with validation
+
+### Pairing Helper 🔐
+
+- List pending device pairing requests
+- One-click approval via UI
+- No SSH required
+- Fixes "disconnected (1008): pairing required" errors
+
+### Import/Export Backup 💾
+
+- **Export:** Download `.tar.gz` of config + workspace
+- **Import:** Restore from backup file (250MB max)
+- Path traversal protection
+- Perfect for migration or disaster recovery
+
+### Custom Providers 🔌
+
+Add OpenAI-compatible providers during setup:
+
+- Ollama (local LLMs)
+- vLLM (high-performance serving)
+- LM Studio (desktop GUI)
+- Any OpenAI-compatible API endpoint
+- Support for environment variable API keys
+
+### Better Diagnostics 📊
+
+- Public `/healthz` endpoint (no auth required)
+- `/setup/api/debug` for comprehensive diagnostics
+- Automatic `openclaw doctor` on failures (5min rate limit)
+- Detailed error messages with troubleshooting hints
+- TCP-based gateway health probes (more reliable)
+
+### Smart Railway Integration 🚂
+
+- Auto-detects Railway environment via `RAILWAY_*` env vars
+- Configures trusted proxies automatically for correct client IPs
+- Secure localhost-only proxy trust (127.0.0.1)
+- Optional override with `OPENCLAW_TRUST_PROXY_ALL`
+
+### Enhanced Reliability 🛡️
+
+- 60-second gateway readiness timeout (was 20s)
+- Background health monitoring with automatic diagnostics
+- Graceful shutdown handling (SIGTERM → SIGKILL escalation)
+- Secret redaction in debug output (5 token patterns)
+- Credentials directory with strict 700 permissions
+
+## Railway Deploy Instructions
+
+### Using Railway Template
+
+1. Click "Deploy on Railway" button (if available)
+2. Configure environment variables:
+
+**Required:**
+
+- `SETUP_PASSWORD` — Your chosen password for `/setup`
+
+**Recommended:**
+
 - `OPENCLAW_STATE_DIR=/data/.openclaw`
 - `OPENCLAW_WORKSPACE_DIR=/data/workspace`
+- `OPENCLAW_VERSION=v2026.2.19` — Optional: pin to a specific release (omit to auto-detect latest stable)
 
-Optional:
-- `OPENCLAW_GATEWAY_TOKEN` — if not set, the wrapper generates one (not ideal). In a template, set it using a generated secret.
-- `SSH_KNOWN_HOSTS` — Base64-encoded known_hosts file for SSH connections
-- `SSH_PRIVATE_KEY` — Private key for SSH authentication (stored securely)
+1. Railway will automatically:
+   - Create a volume at `/data`
+   - Build from the Dockerfile
+   - Enable public networking
+   - Generate a domain like `your-app.up.railway.app`
 
-Notes:
-- This template pins OpenClaw to a released version by default via Docker build arg `OPENCLAW_GIT_REF` (override if you want `main`).
-- SSH client is preinstalled at `/usr/bin/ssh` for remote management.
+### Manual Railway Setup
 
-4) Enable **Public Networking** (HTTP). Railway will assign a domain.
-   - This service listens on Railway's injected `PORT` at runtime (recommended).
-5) Deploy.
+1. Create new project from GitHub repo
+2. Add a **Volume** service mounted at `/data`
+3. Set environment variables (see above)
+4. Enable **Public Networking**
+5. Deploy
 
 Then:
-- Visit `https://<your-app>.up.railway.app/setup`
-  - Your browser will prompt for **HTTP Basic auth**. Use any username; the password is `SETUP_PASSWORD`.
-- Complete setup
-- Visit `https://<your-app>.up.railway.app/` and `/openclaw` (same Basic auth)
 
-## SSH Configuration
+- Visit `https://<your-app>.up.railway.app/setup` (password: your `SETUP_PASSWORD`)
+- Complete setup wizard
+- Visit `/openclaw` to start chatting
 
-The Docker image includes OpenSSH client for remote management:
-
-```bash
-# SSH is available inside the container
-ssh -V
-
-# Example: Create tunnel to remote service
-ssh -N -L 8080:localhost:8080 user@remote-host
-
-# SSH keys can be mounted via volume or environment variables
-```
-
-### Preconfigured SSH
-
-To preconfigure SSH connections:
-
-1. Set `SSH_KNOWN_HOSTS` environment variable with base64-encoded known_hosts
-2. Set `SSH_PRIVATE_KEY` environment variable for authentication
-3. The container will configure SSH on startup
-
-## Getting chat tokens
+## Getting Chat Tokens
 
 ### Telegram bot token
-1) Open Telegram and message **@BotFather**
-2) Run `/newbot` and follow the prompts
-3) BotFather will give you a token that looks like: `123456789:AA...`
-4) Paste that token into `/setup`
+
+1. Open Telegram and message **@BotFather**
+2. Run `/newbot` and follow the prompts
+3. BotFather will give you a token like: `123456789:AA...`
+4. Paste that token into `/setup`
 
 ### Discord bot token
-1) Go to the Discord Developer Portal: https://discord.com/developers/applications
-2) **New Application** → pick a name
-3) Open the **Bot** tab → **Add Bot**
-4) Copy the **Bot Token** and paste it into `/setup`
-5) Invite the bot to your server (OAuth2 URL Generator → scopes: `bot`, `applications.commands`; then choose permissions)
 
-## Persistence (Railway volume)
-
-Railway containers have an ephemeral filesystem. Only the mounted volume at `/data` persists across restarts/redeploys.
-
-What persists cleanly today:
-- **Custom skills / code:** anything under `OPENCLAW_WORKSPACE_DIR` (default: `/data/workspace`)
-- **Node global tools (npm/pnpm):** this template configures defaults so global installs land under `/data`:
-  - npm globals: `/data/npm` (binaries in `/data/npm/bin`)
-  - pnpm globals: `/data/pnpm` (binaries) + `/data/pnpm-store` (store)
-- **Python packages:** create a venv under `/data` (example below). The runtime image includes Python + venv support.
-- **SSH configuration:** `/data/.ssh` persists for key management
-
-What does *not* persist cleanly:
-- `apt-get install ...` (installs into `/usr/*`)
-- Homebrew installs (typically `/opt/homebrew` or similar)
-
-### Optional bootstrap hook
-
-If `/data/workspace/bootstrap.sh` exists, the wrapper will run it on startup (best-effort) before starting the gateway.
-Use this to initialize persistent install prefixes or create a venv.
-
-Example `bootstrap.sh`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Example: create a persistent python venv
-python3 -m venv /data/venv || true
-
-# Example: ensure npm/pnpm dirs exist
-mkdir -p /data/npm /data/npm-cache /data/pnpm /data/pnpm-store
-
-# Example: configure SSH
-mkdir -p /data/.ssh
-chmod 700 /data/.ssh
-```
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. **New Application** → pick a name
+3. Open the **Bot** tab → **Add Bot**
+4. Copy the **Bot Token** and paste into `/setup`
+5. **IMPORTANT:** Enable **MESSAGE CONTENT INTENT** in Bot settings (required)
+6. Invite the bot to your server (OAuth2 URL Generator → scopes: `bot`, `applications.commands`)
 
 ## Troubleshooting
 
-### "disconnected (1008): pairing required" / dashboard health offline
+### "disconnected (1008): pairing required"
 
-This is not a crash — it means the gateway is running, but no device has been approved yet.
+**Solution 1: Use Pairing Helper (UI)**
 
-Fix:
-- Open `/setup`
-- Use the **Debug Console**:
-  - `openclaw devices list`
-  - `openclaw devices approve <requestId>`
+1. Visit `/setup`
+2. Scroll to "Pairing helper" section
+3. Click "Refresh pending devices"
+4. Click "Approve" for each device
 
-If `openclaw devices list` shows no pending request IDs:
-- Make sure you're visiting the Control UI at `/openclaw` (or your native app) and letting it attempt to connect
-  - Note: the Railway wrapper now proxies the gateway and injects the auth token automatically, so you should not need to paste the gateway token into the Control UI when using `/openclaw`.
-- Ensure your state dir is the Railway volume (recommended): `OPENCLAW_STATE_DIR=/data/.openclaw`
-- Check `/setup/api/debug` for the active state/workspace dirs + gateway readiness
+**Solution 2: Use Debug Console**
 
-### "unauthorized: gateway token mismatch"
-
-The Control UI connects using `gateway.remote.token` and the gateway validates `gateway.auth.token`.
-
-Fix:
-- Re-run `/setup` so the wrapper writes both tokens.
-- Or set both values to the same token in config.
+1. Select `openclaw.devices.list`
+2. Note the requestId
+3. Select `openclaw.devices.approve`
+4. Enter requestId and click Run
 
 ### "Application failed to respond" / 502 Bad Gateway
 
-Most often this means the wrapper is up, but the gateway can't start or can't bind.
+1. Visit `/healthz` to check gateway status
+2. Visit `/setup` → Debug Console
+3. Run `openclaw doctor` command
+4. Check `/setup/api/debug` for full diagnostics
 
-Checklist:
-- Ensure you mounted a **Volume** at `/data` and set:
-  - `OPENCLAW_STATE_DIR=/data/.openclaw`
-  - `OPENCLAW_WORKSPACE_DIR=/data/workspace`
-- Ensure **Public Networking** is enabled (Railway will inject `PORT`).
-- Check Railway logs for the wrapper error: it will show `Gateway not ready:` with the reason.
+**Common causes:**
 
-### Legacy CLAWDBOT_* env vars / multiple state directories
+- Gateway not started (check `/healthz` → `gateway.processRunning`)
+- Volume not mounted at `/data`
+- Missing `OPENCLAW_STATE_DIR` or `OPENCLAW_WORKSPACE_DIR` variables
 
-If you see warnings about deprecated `CLAWDBOT_*` variables or state dir split-brain (e.g. `~/.openclaw` vs `/data/...`):
-- Use `OPENCLAW_*` variables only
-- Ensure `OPENCLAW_STATE_DIR=/data/.openclaw` and `OPENCLAW_WORKSPACE_DIR=/data/workspace`
-- Redeploy after fixing Railway Variables
+### Gateway won't start
 
-### Build OOM (out of memory) on Railway
+1. Verify volume is mounted at `/data`
+2. Check environment variables:
 
-Building OpenClaw from source can exceed small memory tiers.
+   ```
+   OPENCLAW_STATE_DIR=/data/.openclaw
+   OPENCLAW_WORKSPACE_DIR=/data/workspace
+   ```
 
-Recommendations:
-- Use a plan with **2GB+ memory**.
-- If you see `Reached heap limit Allocation failed - JavaScript heap out of memory`, upgrade memory and redeploy.
+3. Run `openclaw doctor --fix` in Debug Console
+4. Check `/setup/api/debug` for detailed error info
+5. Verify credentials directory exists with 700 permissions
 
-## Local smoke test
+### Token mismatch errors
+
+1. Set `OPENCLAW_GATEWAY_TOKEN` in Railway Variables
+2. Use `/setup` to reset and reconfigure
+3. Or edit config via Config Editor to ensure `gateway.auth.token` matches
+
+### Build fails on Railway
+
+1. Check Railway build logs — the auto-detection tier used is logged clearly
+2. If the latest stable release has a build issue, pin a known-good version: `OPENCLAW_VERSION=v2026.2.15`
+3. Verify all required files are in the repository
+
+### Import backup fails
+
+**"File too large: X.XMB (max 250MB)"**
+
+- Reduce workspace files before exporting
+- Split large data into multiple imports
+
+**"Import requires both STATE_DIR and WORKSPACE_DIR under /data"**
+
+- Set in Railway Variables:
+
+  ```
+  OPENCLAW_STATE_DIR=/data/.openclaw
+  OPENCLAW_WORKSPACE_DIR=/data/workspace
+  ```
+
+**"Config file too large: X.XKB (max 500KB)"**
+
+- Config exceeds safety limit
+- Remove unnecessary data from config
+
+## Local Development
+
+### Quick smoke test
 
 ```bash
-docker build -t openclaw-alma-v2 .
+docker build -t openclaw-railway-template .
 
 docker run --rm -p 8080:8080 \
   -e PORT=8080 \
@@ -194,20 +303,79 @@ docker run --rm -p 8080:8080 \
   -e OPENCLAW_STATE_DIR=/data/.openclaw \
   -e OPENCLAW_WORKSPACE_DIR=/data/workspace \
   -v $(pwd)/.tmpdata:/data \
-  openclaw-alma-v2
+  openclaw-railway-template
 
-# open http://localhost:8080/setup (password: test)
+# Open http://localhost:8080/setup (password: test)
 ```
 
----
+### Development with live reload
 
-## Governance
+```bash
+# Set environment variables
+export SETUP_PASSWORD=test
+export OPENCLAW_STATE_DIR=/tmp/openclaw-test/.openclaw
+export OPENCLAW_WORKSPACE_DIR=/tmp/openclaw-test/workspace
+export OPENCLAW_GATEWAY_TOKEN=$(openssl rand -hex 32)
 
-**Deployment**: OpenClaw-Alma-v2  
-**Authority**: OP3NF1XER / P4NTHE0N  
-**SSH Stack**: OpenSSH portable (github.com/openssh)  
-**Template Base**: OpenClaw Railway Template
+# Run the wrapper
+npm run dev
+# or
+node src/server.js
 
----
+# Visit http://localhost:8080/setup (password: test)
+```
 
-*OpenFixer Deployment - OP3NF1XER Governance*
+### Override OpenClaw version locally
+
+```bash
+# Pin to a specific release
+docker build --build-arg OPENCLAW_VERSION=v2026.2.19 -t openclaw-test .
+
+# Omit to auto-detect latest stable release
+docker build -t openclaw-test .
+```
+
+## Documentation
+
+- **[CLAUDE.md](CLAUDE.md)** - Developer documentation and architecture notes
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines and development setup
+- **[docs/OPENCLAW-VERSION-CONTROL.md](docs/OPENCLAW-VERSION-CONTROL.md)** - Version control and auto-detection details
+- **[docs/MIGRATION_FROM_MOLTBOT.md](docs/MIGRATION_FROM_MOLTBOT.md)** - Migration guide from older versions
+- **[docs/STARTUP-IMPROVEMENTS.md](docs/STARTUP-IMPROVEMENTS.md)** - Gateway startup and reliability notes
+
+## Support & Community
+
+- **Report Issues**: <https://github.com/codetitlan/openclaw-railway-template/issues>
+- **Discord**: <https://discord.com/invite/clawd>
+- **OpenClaw Docs**: <https://docs.openclaw.com>
+
+## License
+
+[LICENSE](LICENSE)
+
+## Credits
+
+Based on [clawdbot-railway-template](https://github.com/vignesh07/clawdbot-railway-template) with significant enhancements.
+
+### Major Contributors
+
+- **Debug Console, Config Editor, Pairing Helper** - Enhanced onboarding workflow
+- **Import/Export Backup** - Migration and disaster recovery
+- **Custom Provider Support** - Ollama, vLLM, and more
+- **Smart Railway Integration** (PR #12 by [@ArtificialSight](https://github.com/ArtificialSight)) - Proxy detection
+- **OpenClaw Version Control** - Flexible version management
+- **Enhanced Diagnostics** - Better error messages and troubleshooting
+- **Automatic Migration** - Legacy env var support
+
+### Features
+
+- ✅ SSH-free command execution via Debug Console
+- ✅ Browser-based configuration editing
+- ✅ One-click device pairing approval
+- ✅ Complete backup import/export system
+- ✅ Support for custom AI providers
+- ✅ Flexible OpenClaw version pinning
+- ✅ Smart Railway environment detection
+- ✅ Comprehensive health monitoring
+- ✅ Automatic migration from legacy templates
+- ✅ Security hardening (secret redaction, path validation)
