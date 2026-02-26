@@ -2,9 +2,13 @@
 builder = "dockerfile"
 
 [deploy]
-healthcheckPath = "/setup/healthz"
-healthcheckTimeout = 300
 restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
 
-[variables]
-PORT = "8080"
+[networking]
+# HTTP port for OpenClaw
+port = 8080
+
+# Additional TCP port for SFTP
+[[networking.tcp]]
+port = 2022
