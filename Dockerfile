@@ -34,6 +34,9 @@ RUN mkdir -p /app/openclaw \
 # Create data directories
 RUN mkdir -p /data /config
 RUN chown -R appuser:appuser /data /config /app
+COPY src ./src
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 # Copy configuration files
 COPY supervisord.conf /etc/supervisord.conf
